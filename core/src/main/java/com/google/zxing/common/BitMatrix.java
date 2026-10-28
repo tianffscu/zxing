@@ -197,6 +197,15 @@ public final class BitMatrix implements Cloneable {
     for (int i = 0; i < max; i++) {
       bits[i] = ~bits[i];
     }
+    // Clear padding bits beyond the logical width in the last int of each row
+    int remainder = width % 32;
+    if (remainder != 0) {
+      int mask = (1 << remainder) - 1;
+      for (int y = 0; y < height; y++) {
+        int offset = y * rowSize + rowSize - 1;
+        bits[offset] &= mask;
+      }
+    }
   }
 
   /**
@@ -284,6 +293,29 @@ public final class BitMatrix implements Cloneable {
    */
   public void setRow(int y, BitArray row) {
     System.arraycopy(row.getBitArray(), 0, bits, y * rowSize, rowSize);
+  }
+
+  /**
+   * Modifies this {@code BitMatrix} to represent the same but rotated the given degrees (0, 90, 180, 270)
+   *
+   * @param degrees number of degrees to rotate through counter-clockwise (0, 90, 180, 270)
+   */
+  public void rotate(int degrees) {
+    switch (degrees % 360) {
+      case 0:
+        return;
+      case 90:
+        rotate90();
+        return;
+      case 180:
+        rotate180();
+        return;
+      case 270:
+        rotate90();
+        rotate180();
+        return;
+    }
+    throw new IllegalArgumentException("degrees must be a multiple of 0, 90, 180, or 270");
   }
 
   /**

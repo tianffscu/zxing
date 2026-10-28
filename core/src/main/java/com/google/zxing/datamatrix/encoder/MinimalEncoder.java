@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.google.zxing.common.ECIEncoderSet;
+import com.google.zxing.common.MinimalECIInput;
 
 /**
  * Encoder that encodes minimally
@@ -30,7 +30,7 @@ import com.google.zxing.common.ECIEncoderSet;
  *
  * Uses Dijkstra to produce mathematically minimal encodings that are in some cases smaller than the results produced
  * by the algorithm described in annex S in the specification ISO/IEC 16022:200(E). The biggest improvment of this
- * algorithm over that one is the case when the algorithm enters the most inefficient mode, the B256 mode. The 
+ * algorithm over that one is the case when the algorithm enters the most inefficient mode, the B256 mode. The
  * algorithm from the specification algorithm will exit this mode only if it encounters digits so that arbitrarily
  * inefficient results can be produced if the postfix contains no digits.
  *
@@ -45,7 +45,7 @@ import com.google.zxing.common.ECIEncoderSet;
  * contains many * characters from ISO-8859-2 (Latin 2) and few from ISO-8859-3 (Latin 3)).
  * In a second stage this stream of ECIs and bytes is minimally encoded using the various Data Matrix encoding modes.
  * While both stages encode mathematically minimally it is not ensured that the result is mathematically minimal since
- * the size growth for inserting an ECI in the first stage can only be approximated as the first stage does not know 
+ * the size growth for inserting an ECI in the first stage can only be approximated as the first stage does not know
  * in which mode the ECI will occur in the second stage (may, or may not require an extra latch to ASCII depending on
  * the current mode). The reason for this shortcoming are difficulties in implementing it in a straightforward and
  * readable manner.
@@ -165,7 +165,7 @@ public final class MinimalEncoder {
    *  The number of characters encoded is returned in characterLength.
    *  The number of characters encoded is also minimal in the sense that the algorithm stops as soon
    *  as a character encoding fills a C40 word competely (three C40 values). An exception is at the
-   *  end of the string where two C40 values are allowed (according to the spec the third c40 value 
+   *  end of the string where two C40 values are allowed (according to the spec the third c40 value
    *  is filled  with 0 (Shift 1) in this case).
    */
   static int getNumberOfC40Words(Input input, int from, boolean c40,int[] characterLength) {
@@ -217,7 +217,7 @@ public final class MinimalEncoder {
         // one ASCII encoded character or an extended character via Upper Shift
         addEdge(edges, new Edge(input, Mode.ASCII, from, 1, previous));
       }
-  
+
       Mode[] modes = {Mode.C40, Mode.TEXT};
       for (Mode mode : modes) {
         int[] characterLength = new int[1];
@@ -225,7 +225,7 @@ public final class MinimalEncoder {
           addEdge(edges, new Edge(input, mode, from, characterLength[0], previous));
         }
       }
-  
+
       if (input.haveNCharacters(from,3) &&
           HighLevelEncoder.isNativeX12(input.charAt(from)) &&
           HighLevelEncoder.isNativeX12(input.charAt(from + 1)) &&
@@ -260,16 +260,16 @@ public final class MinimalEncoder {
      * Likewise the end vertices are located after the last character at position input.length().
      * For any position there might be up to six vertices, one for each of the encoding types ASCII, C40, TEXT, X12,
      * EDF and B256.
-     * 
+     *
      * As an example consider the input string "ABC123" then at position 0 there is only one vertex with the default
      * ASCII encodation. At position 3 there might be vertices for the types ASCII, C40, X12, EDF and B256.
      *
      * An edge leading to such a vertex encodes one or more of the characters left of the position that the vertex
      * represents. It encodes the characters in the encoding mode of the vertex that it ends on. In other words,
-     * all edges leading to a particular vertex encode the same characters (the length of the suffix can vary) using the same 
+     * all edges leading to a particular vertex encode the same characters (the length of the suffix can vary) using the same
      * encoding mode.
      * As an example consider the input string "ABC123" and the vertex (4,EDF). Possible edges leading to this vertex
-     * are: 
+     * are:
      *   (0,ASCII)  --EDF(ABC1)--> (4,EDF)
      *   (1,ASCII)  --EDF(BC1)-->  (4,EDF)
      *   (1,B256)   --EDF(BC1)-->  (4,EDF)
@@ -389,11 +389,11 @@ public final class MinimalEncoder {
      * (0,ASCII) B256(A) (3) --> (1,B256) B256(B) (3) --> (2,B256) EDF(CDE) (6) --> (5,EDF)
      * (0,ASCII) B256(A) (3) --> (1,B256) B256(B) (3) --> (2,B256) EDF(CDEF) (6) --> (6,EDF)
      *
-     * Edge "(2,ASCII) ASCII(C) (3) --> (3,ASCII)" is minimal for the vertex (3,ASCII) so that edges "(2,EDF) ASCII(C) (5) --> (3,ASCII)" 
+     * Edge "(2,ASCII) ASCII(C) (3) --> (3,ASCII)" is minimal for the vertex (3,ASCII) so that edges "(2,EDF) ASCII(C) (5) --> (3,ASCII)"
      * and "(2,B256) ASCII(C) (4) --> (3,ASCII)" can be removed.
-     * Edge "(0,ASCII) EDF(ABC) (4) --> (3,EDF)" is minimal for the vertex (3,EDF) so that edges "(1,ASCII) EDF(BC) (5) --> (3,EDF)" 
+     * Edge "(0,ASCII) EDF(ABC) (4) --> (3,EDF)" is minimal for the vertex (3,EDF) so that edges "(1,ASCII) EDF(BC) (5) --> (3,EDF)"
      * and "(1,B256) EDF(BC) (6) --> (3,EDF)" can be removed.
-     * Edge "(2,B256) B256(C) (4) --> (3,B256)" is minimal for the vertex (3,B256) so that edges "(2,ASCII) B256(C) (5) --> (3,B256)" 
+     * Edge "(2,B256) B256(C) (4) --> (3,B256)" is minimal for the vertex (3,B256) so that edges "(2,ASCII) B256(C) (5) --> (3,B256)"
      * and "(2,EDF) B256(C) (6) --> (3,B256)" can be removed.
      *
      * This continues for vertices 3 thru 7
@@ -472,7 +472,7 @@ public final class MinimalEncoder {
     }
 
     if (minimalJ < 0) {
-      throw new RuntimeException("Internal error: failed to encode \"" + input + "\"");
+      throw new IllegalStateException("Failed to encode \"" + input + "\"");
     }
     return new Result(edges[inputLength][minimalJ]);
   }
@@ -512,7 +512,7 @@ public final class MinimalEncoder {
       * C40 -> ASCII: word(c1,c2,c3), 254
       * TEXT -> ASCII: word(c1,c2,c3), 254
       * X12 -> ASCII: word(c1,c2,c3), 254
-      * EDIFACT -> ASCII: Unlatch character,0,0,0 or c1,Unlatch character,0,0 or c1,c2,Unlatch character,0 or 
+      * EDIFACT -> ASCII: Unlatch character,0,0,0 or c1,Unlatch character,0,0 or c1,c2,Unlatch character,0 or
       * c1,c2,c3,Unlatch character
       * B256 -> ASCII: without latch after n bytes
       */
@@ -616,7 +616,7 @@ public final class MinimalEncoder {
 
         // see 5.2.5.2 C40 encodation rules and 5.2.7.2 ANSI X12 encodation rules
         if (fromPosition + characterLength >= input.length() && getCodewordsRemaining(cachedTotalSize) == 0) {
-          return Mode.ASCII; 
+          return Mode.ASCII;
         }
         int lastASCII = getLastASCII();
         if (lastASCII == 1 && getCodewordsRemaining(cachedTotalSize + 1) == 0) {
@@ -631,7 +631,7 @@ public final class MinimalEncoder {
     }
 
     /** Peeks ahead and returns 1 if the postfix consists of exactly two digits, 2 if the postfix consists of exactly
-     *  two consecutive digits and a non extended character or of 4 digits. 
+     *  two consecutive digits and a non extended character or of 4 digits.
      *  Returns 0 in any other case
      **/
     int getLastASCII() {
@@ -970,7 +970,7 @@ public final class MinimalEncoder {
       } else if (input.getMacroId() == 6) {
         size += prepend(MinimalEncoder.Edge.getBytes(237), bytesAL);
       }
-   
+
       if (input.getFNC1Character() > 0) {
         size += prepend(MinimalEncoder.Edge.getBytes(232), bytesAL);
       }
@@ -1022,32 +1022,15 @@ public final class MinimalEncoder {
 
   }
 
-  private static final class Input {
+  private static final class Input extends MinimalECIInput {
 
-    private static final int COST_PER_ECI = 3; // approximated (latch to ASCII + 2 codewords)
-    private final int[] bytes;
-    private final int fnc1;
     private final SymbolShapeHint shape;
     private final int macroId;
 
     private Input(String stringToEncode, Charset priorityCharset, int fnc1, SymbolShapeHint shape, int macroId) {
-      this.fnc1 = fnc1;
+      super(stringToEncode, priorityCharset, fnc1);
       this.shape = shape;
       this.macroId = macroId;
-      ECIEncoderSet encoderSet = new ECIEncoderSet(stringToEncode, priorityCharset, fnc1);
-      if (encoderSet.length() == 1) { //optimization for the case when all can be encoded without ECI in ISO-8859-1
-        bytes = new int[stringToEncode.length()];
-        for (int i = 0; i < bytes.length; i++) {
-          char c = stringToEncode.charAt(i);
-          bytes[i] = c == fnc1 ? 1000 : (int) c;
-        }
-      } else {
-        bytes = encodeMinimally(stringToEncode, encoderSet, fnc1);
-      }
-    }
-
-    private int getFNC1Character() {
-      return fnc1;
     }
 
     private int getMacroId() {
@@ -1056,155 +1039,6 @@ public final class MinimalEncoder {
 
     private SymbolShapeHint getShapeHint() {
       return shape;
-    }
-
-    private int length() {
-      return bytes.length;
-    }
-
-    boolean haveNCharacters(int index, int n) {
-      if (index + n - 1 >= bytes.length) {
-        return false;
-      }
-      for (int i = 0; i < n; i++) {
-        if (isECI(index + i)) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    private char charAt(int index) {
-      assert !isECI(index);
-      return isFNC1(index) ? (char) fnc1 : (char) bytes[index];
-    }
-
-    private boolean isECI(int index) {
-      return bytes[index] > 255 && bytes[index] <= 999;
-    }
-
-    private boolean isFNC1(int index) {
-      return bytes[index] == 1000;
-    }
-
-    private int getECIValue(int index) {
-      assert isECI(index);
-      return bytes[index] - 256;
-    }
-
-    static void addEdge(InputEdge[][] edges, int to, InputEdge edge) {
-      if (edges[to][edge.encoderIndex] == null ||
-          edges[to][edge.encoderIndex].cachedTotalSize > edge.cachedTotalSize) {
-        edges[to][edge.encoderIndex] = edge;
-      }
-    }
-
-    static void addEdges(String stringToEncode, 
-                         ECIEncoderSet encoderSet, 
-                         InputEdge[][] edges, 
-                         int from, 
-                         InputEdge previous, 
-                         int fnc1) {
-
-      char ch = stringToEncode.charAt(from);
-
-      int start = 0;
-      int end = encoderSet.length();
-      if (encoderSet.getPriorityEncoderIndex() >= 0 && (ch == fnc1 || encoderSet.canEncode(ch,
-          encoderSet.getPriorityEncoderIndex()))) {
-        start = encoderSet.getPriorityEncoderIndex();
-        end = start + 1;
-      }
-  
-      for (int i = start; i < end; i++) {
-        if (ch == fnc1 || encoderSet.canEncode(ch,i)) {
-          addEdge(edges, from + 1, new InputEdge(ch, encoderSet, i, previous, fnc1));
-        }
-      }
-    }
-
-    static int[] encodeMinimally(String stringToEncode, ECIEncoderSet encoderSet, int fnc1) {
-      int inputLength = stringToEncode.length();
-  
-      // Array that represents vertices. There is a vertex for every character and encoding.
-      InputEdge[][] edges = new InputEdge[inputLength + 1][encoderSet.length()];
-      addEdges(stringToEncode, encoderSet, edges, 0, null, fnc1);
-  
-      for (int i = 1; i <= inputLength; i++) {
-        for (int j = 0; j < encoderSet.length(); j++) {
-          if (edges[i][j] != null && i < inputLength) {
-            addEdges(stringToEncode, encoderSet, edges, i, edges[i][j], fnc1);
-          }
-        }
-        //optimize memory by removing edges that have been passed.
-        for (int j = 0; j < encoderSet.length(); j++) {
-          edges[i - 1][j] = null;
-        }
-      }
-      int minimalJ = -1;
-      int minimalSize = Integer.MAX_VALUE;
-      for (int j = 0; j < encoderSet.length(); j++) {
-        if (edges[inputLength][j] != null) {
-          InputEdge edge = edges[inputLength][j];
-          if (edge.cachedTotalSize < minimalSize) {
-            minimalSize = edge.cachedTotalSize;
-            minimalJ = j;
-          }
-        }
-      }
-      if (minimalJ < 0) {
-        throw new RuntimeException("Internal error: failed to encode \"" + stringToEncode + "\"");
-      }
-      List<Integer> intsAL = new ArrayList<>();
-      InputEdge current = edges[inputLength][minimalJ];
-      while (current != null) {
-        if (current.isFNC1()) {
-          intsAL.add(0, 1000);
-        } else {
-          byte[] bytes = encoderSet.encode(current.c,current.encoderIndex);
-          for (int i = bytes.length - 1; i >= 0; i--) {
-            intsAL.add(0, (bytes[i] & 0xFF));
-          }
-        }
-        int previousEncoderIndex = current.previous == null ? 0 : current.previous.encoderIndex;
-        if (previousEncoderIndex != current.encoderIndex) {
-          intsAL.add(0,256 + encoderSet.getECIValue(current.encoderIndex));
-        }
-        current = current.previous;
-      }
-      int[] ints = new int[intsAL.size()];
-      for (int i = 0; i < ints.length; i++) {
-        ints[i] = intsAL.get(i);
-      }
-      return ints;
-    }
-
-    private static final class InputEdge {
-      private final char c;
-      private final int encoderIndex; //the encoding of this edge
-      private final InputEdge previous;
-      private final int cachedTotalSize;
-
-      private InputEdge(char c, ECIEncoderSet encoderSet, int encoderIndex, InputEdge previous, int fnc1) {
-        this.c = c == fnc1 ? 1000 : c;
-        this.encoderIndex = encoderIndex;
-        this.previous = previous;
-
-        int size = this.c == 1000 ? 1 : encoderSet.encode(c, encoderIndex).length;
-        int previousEncoderIndex = previous == null ? 0 : previous.encoderIndex;
-        if (previousEncoderIndex != encoderIndex) {
-          size += COST_PER_ECI;
-        }
-        if (previous != null) {
-          size += previous.cachedTotalSize;
-        }
-        this.cachedTotalSize = size;
-      }
-
-      boolean isFNC1() {
-        return c == 1000;
-      }
-
     }
   }
 }

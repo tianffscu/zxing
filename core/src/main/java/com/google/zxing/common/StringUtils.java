@@ -18,6 +18,7 @@ package com.google.zxing.common;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.Map;
 
 import com.google.zxing.DecodeHintType;
@@ -31,12 +32,42 @@ import com.google.zxing.DecodeHintType;
 public final class StringUtils {
 
   private static final Charset PLATFORM_DEFAULT_ENCODING = Charset.defaultCharset();
-  public static final Charset SHIFT_JIS_CHARSET = Charset.forName("SJIS");
-  public static final Charset GB2312_CHARSET = Charset.forName("GB2312");
-  private static final Charset EUC_JP = Charset.forName("EUC_JP");
+  public static final Charset SHIFT_JIS_CHARSET;
+  static {
+    Charset sjisCharset;
+    try {
+      sjisCharset = Charset.forName("SJIS");
+    } catch (UnsupportedCharsetException ucee) {
+      // Can happen on JREs without lib/charsets.jar
+      sjisCharset = null;
+    }
+    SHIFT_JIS_CHARSET = sjisCharset;
+  }
+  public static final Charset GB2312_CHARSET;
+  static {
+    Charset gb2312Charset;
+    try {
+      gb2312Charset = Charset.forName("GB2312");
+    } catch (UnsupportedCharsetException ucee) {
+      // Can happen on some embedded JREs?
+      gb2312Charset = null;
+    }
+    GB2312_CHARSET = gb2312Charset;
+  }
+  private static final Charset EUC_JP;
+  static {
+    Charset eucJpCharset;
+    try {
+      eucJpCharset = Charset.forName("EUC_JP");
+    } catch (UnsupportedCharsetException ucee) {
+      // Can happen on JREs without lib/charsets.jar
+      eucJpCharset = null;
+    }
+    EUC_JP = eucJpCharset;
+  }
   private static final boolean ASSUME_SHIFT_JIS =
-      SHIFT_JIS_CHARSET.equals(PLATFORM_DEFAULT_ENCODING) ||
-      EUC_JP.equals(PLATFORM_DEFAULT_ENCODING);
+      (SHIFT_JIS_CHARSET != null && SHIFT_JIS_CHARSET.equals(PLATFORM_DEFAULT_ENCODING)) ||
+      (EUC_JP != null && EUC_JP.equals(PLATFORM_DEFAULT_ENCODING));
 
   // Retained for ABI compatibility with earlier versions
   public static final String SHIFT_JIS = "SJIS";
@@ -53,11 +84,13 @@ public final class StringUtils {
    */
   public static String guessEncoding(byte[] bytes, Map<DecodeHintType,?> hints) {
     Charset c = guessCharset(bytes, hints);
-    if (c == SHIFT_JIS_CHARSET) {
+    if (c.equals(SHIFT_JIS_CHARSET)) {
       return "SJIS";
-    } else if (c == StandardCharsets.UTF_8) {
+    }
+    if (c.equals(StandardCharsets.UTF_8)) {
       return "UTF8";
-    } else if (c == StandardCharsets.ISO_8859_1) {
+    }
+    if (c.equals(StandardCharsets.ISO_8859_1)) {
       return "ISO8859_1";
     }
     return c.name();
@@ -88,7 +121,7 @@ public final class StringUtils {
     // which should be by far the most common encodings.
     int length = bytes.length;
     boolean canBeISO88591 = true;
-    boolean canBeShiftJIS = true;
+    boolean canBeShiftJIS = SHIFT_JIS_CHARSET != null;
     boolean canBeUTF8 = true;
     int utf8BytesLeft = 0;
     int utf2BytesChars = 0;

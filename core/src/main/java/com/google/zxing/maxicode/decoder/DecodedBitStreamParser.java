@@ -19,7 +19,9 @@ package com.google.zxing.maxicode.decoder;
 import com.google.zxing.FormatException;
 import com.google.zxing.common.DecoderResult;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
+import java.util.Locale;
 
 /**
  * <p>MaxiCodes can encode text or structured information as bits in one of several modes,
@@ -62,7 +64,7 @@ final class DecodedBitStreamParser {
 
   @SuppressWarnings("checkstyle:lineLength")
   private static final String[] SETS = {
-    "\nABCDEFGHIJKLMNOPQRSTUVWXYZ" + ECI + FS + GS + RS + NS + ' ' + PAD +
+    "\rABCDEFGHIJKLMNOPQRSTUVWXYZ" + ECI + FS + GS + RS + NS + ' ' + PAD +
         "\"#$%&'()*+,-./0123456789:" + SHIFTB + SHIFTC + SHIFTD + SHIFTE + LATCHB,
     "`abcdefghijklmnopqrstuvwxyz" + ECI + FS + GS + RS + NS + '{' + PAD +
         "}~\u007F;<=>?[\\]^_ ,./:@!|" + PAD + TWOSHIFTA + THREESHIFTA + PAD +
@@ -96,16 +98,20 @@ final class DecodedBitStreamParser {
           if (ps2Length > 10) {
             throw FormatException.getFormatInstance();
           }
-          NumberFormat df = new DecimalFormat("0000000000".substring(0, ps2Length));
+          NumberFormat df = new DecimalFormat("0000000000".substring(0, ps2Length),
+              DecimalFormatSymbols.getInstance(Locale.ROOT));
           postcode = df.format(pc);
         } else {
           postcode = getPostCode3(bytes);
         }
-        NumberFormat threeDigits = new DecimalFormat("000");
+        NumberFormat threeDigits = new DecimalFormat("000", DecimalFormatSymbols.getInstance(Locale.ROOT));
         String country = threeDigits.format(getCountry(bytes));
         String service = threeDigits.format(getServiceClass(bytes));
         result.append(getMessage(bytes, 10, 84));
         if (result.toString().startsWith("[)>" + RS + "01" + GS)) {
+          if (result.length() < 9) {
+            throw FormatException.getFormatInstance();
+          }
           result.insert(9, postcode + GS + country + GS + service + GS);
         } else {
           result.insert(0, postcode + GS + country + GS + service + GS);
@@ -158,7 +164,7 @@ final class DecodedBitStreamParser {
     return sb.toString();
   }
 
-  private static String getMessage(byte[] bytes, int start, int len) {
+  private static String getMessage(byte[] bytes, int start, int len) throws FormatException {
     StringBuilder sb = new StringBuilder();
     int shift = -1;
     int set = 0;
@@ -194,8 +200,11 @@ final class DecodedBitStreamParser {
           shift = 3;
           break;
         case NS:
+          if (i + 5 >= start + len) {
+            throw FormatException.getFormatInstance();
+          }
           int nsval = (bytes[++i] << 24) + (bytes[++i] << 18) + (bytes[++i] << 12) + (bytes[++i] << 6) + bytes[++i];
-          sb.append(new DecimalFormat("000000000").format(nsval));
+          sb.append(new DecimalFormat("000000000", DecimalFormatSymbols.getInstance(Locale.ROOT)).format(nsval));
           break;
         case LOCK:
           shift = -1;

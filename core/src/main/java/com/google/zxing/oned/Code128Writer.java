@@ -71,7 +71,7 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
   }
 
   @Override
-  protected boolean[] encode(String contents, Map<EncodeHintType,?> hints) {
+  public boolean[] encode(String contents, Map<EncodeHintType,?> hints) {
 
     int forcedCodeSet = check(contents, hints);
 
@@ -82,13 +82,6 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
   }
 
   private static int check(String contents, Map<EncodeHintType,?> hints) {
-    int length = contents.length();
-    // Check length
-    if (length < 1 || length > 80) {
-      throw new IllegalArgumentException(
-          "Contents length should be between 1 and 80 characters, but got " + length);
-    }
-
     // Check for forced code set hint.
     int forcedCodeSet = -1;
     if (hints != null && hints.containsKey(EncodeHintType.FORCE_CODE_SET)) {
@@ -109,6 +102,7 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
     }
 
     // Check content
+    int length = contents.length();
     for (int i = 0; i < length; i++) {
       char c = contents.charAt(i);
       // check for non ascii characters that are not special GS1 characters
@@ -137,7 +131,7 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
           break;
         case CODE_CODE_B:
           // allows no ascii below 32 (terminal symbols)
-          if (c <= 32) {
+          if (c < 32) {
             throw new IllegalArgumentException("Bad character in input for forced code set B: ASCII value=" + (int) c);
           }
           break;
@@ -255,6 +249,9 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
   static boolean[] produceResult(Collection<int[]> patterns, int checkSum) {
     // Compute and append checksum
     checkSum %= 103;
+    if (checkSum < 0) {
+      throw new IllegalArgumentException("Unable to compute a valid input checksum");
+    }
     patterns.add(Code128Reader.CODE_PATTERNS[checkSum]);
 
     // Append stop code
@@ -362,7 +359,7 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
     return CODE_CODE_B;
   }
 
-  /** 
+  /**
    * Encodes minimally using Divide-And-Conquer with Memoization
    **/
   private static final class MinimalEncoder {
@@ -435,8 +432,8 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
               patternIndex = CODE_FNC_3;
               break;
             case ESCAPE_FNC_4:
-              if ((charset == Charset.A && latch != Latch.SHIFT) ||
-                  (charset == Charset.B && latch == Latch.SHIFT)) {
+              if (charset == Charset.A && latch != Latch.SHIFT ||
+                  charset == Charset.B && latch == Latch.SHIFT) {
                 patternIndex = CODE_FNC_4_A;
               } else {
                 patternIndex = CODE_FNC_4_B;
@@ -445,11 +442,10 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
             default:
               patternIndex = contents.charAt(i) - ' ';
           }
-          if ((charset == Charset.A && latch != Latch.SHIFT) ||
-              (charset == Charset.B && latch == Latch.SHIFT)) {
-            if (patternIndex < 0) {
-              patternIndex += '`';
-            }
+          if ((charset == Charset.A && latch != Latch.SHIFT ||
+               charset == Charset.B && latch == Latch.SHIFT) &&
+               patternIndex < 0) {
+            patternIndex += '`';
           }
           addPattern(patterns, patternIndex, checkSum, checkWeight, i);
         }
@@ -505,11 +501,11 @@ public final class Code128Writer extends OneDimensionalCodeWriter {
       if (mCost > 0) {
         return mCost;
       }
-        
+
       int minCost = Integer.MAX_VALUE;
       Latch minLatch = Latch.NONE;
       boolean atEnd = position + 1 >= contents.length();
-      
+
       Charset[] sets = new Charset[] { Charset.A, Charset.B };
       for (int i = 0; i <= 1; i++) {
         if (canEncode(contents, sets[i], position)) {

@@ -83,6 +83,10 @@ public final class QRCodeMultiReader extends QRCodeReader implements MultipleBar
           result.putMetadata(ResultMetadataType.STRUCTURED_APPEND_PARITY,
                              decoderResult.getStructuredAppendParity());
         }
+        result.putMetadata(ResultMetadataType.ERRORS_CORRECTED, decoderResult.getErrorsCorrected());
+        // Fix SYMBOLOGY_IDENTIFIER loss in QRCodeMultiReader
+        result.putMetadata(ResultMetadataType.SYMBOLOGY_IDENTIFIER, "]Q" + decoderResult.getSymbologyModifier());
+
         results.add(result);
       } catch (ReaderException re) {
         // ignore and continue

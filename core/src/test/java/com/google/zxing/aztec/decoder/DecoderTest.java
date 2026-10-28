@@ -64,6 +64,49 @@ public final class DecoderTest extends Assert {
   }
 
   @Test
+  public void testHighLevelDecodeShortInput() throws FormatException {
+    // fewer than 5 corrected bits decode to nothing and must not throw NegativeArraySizeException
+    assertEquals("", Decoder.highLevelDecode(new boolean[0]));
+    assertEquals("", Decoder.highLevelDecode(new boolean[1]));
+  }
+
+  @Test
+  public void testDecodeNoDataCodewords() {
+    // a detector result claiming zero (or negative) data codewords must fail as FormatException,
+    // not IllegalArgumentException / NegativeArraySizeException out of the Reed-Solomon step
+    BitMatrix matrix = new BitMatrix(151, 151);
+    for (int nbDatablocks : new int[] { 0, -1 }) {
+      for (int nbLayers : new int[] { 0, 1, 2 }) {
+        for (boolean compact : new boolean[] { true, false }) {
+          try {
+            new Decoder().decode(new AztecDetectorResult(matrix, NO_POINTS, compact, nbDatablocks, nbLayers));
+            fail("nbDatablocks=" + nbDatablocks + " nbLayers=" + nbLayers + " should be rejected");
+          } catch (FormatException expected) {
+            // expected
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testDecodeLayerCountMatrixMismatch() {
+    // a detector result whose bit matrix is smaller than its layer count implies must fail as
+    // FormatException, not ArrayIndexOutOfBoundsException out of the bit-extraction step
+    BitMatrix matrix = new BitMatrix(15, 15); // the size of a compact one-layer symbol only
+    for (boolean compact : new boolean[] { true, false }) {
+      for (int nbLayers : new int[] { 2, 4, 10, 32 }) {
+        try {
+          new Decoder().decode(new AztecDetectorResult(matrix, NO_POINTS, compact, 10, nbLayers));
+          fail("compact=" + compact + " nbLayers=" + nbLayers + " should be rejected");
+        } catch (FormatException expected) {
+          // expected
+        }
+      }
+    }
+  }
+
+  @Test
   public void testAztecResult() throws FormatException {
     BitMatrix matrix = BitMatrix.parse(
         "X X X X X     X X X       X X X     X X X     \n" +

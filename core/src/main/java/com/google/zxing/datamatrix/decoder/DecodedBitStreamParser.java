@@ -19,10 +19,9 @@ package com.google.zxing.datamatrix.decoder;
 import com.google.zxing.FormatException;
 import com.google.zxing.common.BitSource;
 import com.google.zxing.common.DecoderResult;
-import com.google.zxing.common.CharacterSetECI;
+import com.google.zxing.common.ECIStringBuilder;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -94,6 +93,7 @@ final class DecodedBitStreamParser {
     List<byte[]> byteSegments = new ArrayList<>(1);
     Mode mode = Mode.ASCII_ENCODE;
     // Could look directly at 'bytes', if we're sure of not having to account for multi byte values
+    boolean readerInit = (bytes.length > 0 && (bytes[0] & 0xFF) == 234);
     Set<Integer> fnc1Positions = new HashSet<>();
     int symbologyModifier;
     boolean isECIencoded = false;
@@ -128,7 +128,7 @@ final class DecodedBitStreamParser {
       }
     } while (mode != Mode.PAD_ENCODE && bits.available() > 0);
     if (resultTrailer.length() > 0) {
-      result.append(resultTrailer);
+      result.appendCharacters(resultTrailer);
     }
     if (isECIencoded) {
       // Examples for this numbers can be found in this documentation of a hardware barcode scanner:
@@ -150,11 +150,13 @@ final class DecodedBitStreamParser {
       }
     }
 
-    return new DecoderResult(bytes,
-                             result.toString(),
-                             byteSegments.isEmpty() ? null : byteSegments,
-                             null,
-                             symbologyModifier);
+    DecoderResult res = new DecoderResult(bytes,
+                                          result.toString(),
+                                          byteSegments.isEmpty() ? null : byteSegments,
+                                          null,
+                                          symbologyModifier);
+    res.setReaderInit(readerInit);
+    return res;
   }
 
   /**
@@ -195,9 +197,10 @@ final class DecodedBitStreamParser {
             result.append((char) 29); // translate as ASCII 29
             break;
           case 233: // Structured Append
+            // Ignore for now
+            break;
           case 234: // Reader Programming
-            // Ignore these symbols for now
-            //throw ReaderException.getInstance();
+            // Effective only as first codeword (handled above)
             break;
           case 235: // Upper Shift (shift to Extended ASCII)
             upperShift = true;
@@ -527,6 +530,9 @@ final class DecodedBitStreamParser {
     } else if (d1 < 250) {
       count = d1;
     } else {
+      if (bits.available() < 8) {
+        throw FormatException.getFormatInstance();
+      }
       count = 250 * (d1 - 249) + unrandomize255State(bits.readBits(8), codewordPosition++);
     }
 
@@ -588,70 +594,4 @@ final class DecodedBitStreamParser {
     return tempVariable >= 0 ? tempVariable : tempVariable + 256;
   }
 
-  private static final class ECIStringBuilder {
-    private StringBuilder currentBytes;
-    private StringBuilder currentChars;
-    private Charset currentCharset = StandardCharsets.ISO_8859_1;
-    private String result = null;
-    private boolean hadECI = false;
-
-    private ECIStringBuilder(int initialCapacity) {
-      currentBytes = new StringBuilder(initialCapacity);
-    }
-
-    private void append(char value) {
-      currentBytes.append(value);
-    }
-
-    private void append(String value) {
-      currentBytes.append(value);
-    }
-
-    private void append(int value) {
-      currentBytes.append(value);
-    }
-
-    private void appendECI(int value) throws FormatException {
-      encodeCurrentBytesIfAny();
-      CharacterSetECI characterSetECI = CharacterSetECI.getCharacterSetECIByValue(value);
-      if (characterSetECI == null) {
-        throw FormatException.getFormatInstance(new RuntimeException("Unsupported ECI value " + value));
-      }
-      currentCharset = characterSetECI.getCharset();
-    }
-
-    private void encodeCurrentBytesIfAny() {
-      if (!hadECI) {
-        currentChars = currentBytes;
-        currentBytes = new StringBuilder();
-        hadECI = true;
-      } else if (currentBytes.length() > 0) {
-        byte[] bytes = new byte[currentBytes.length()];
-        for (int i = 0; i < bytes.length; i++) {
-          bytes[i] = (byte) (currentBytes.charAt(i) & 0xff);
-        }
-        currentChars.append(new String(bytes, currentCharset));
-        currentBytes.setLength(0);
-      }
-    }
-
-    private void append(StringBuilder value) {
-      encodeCurrentBytesIfAny();
-      currentChars.append(value);
-    }
-
-    /**
-     * returns the length of toString()
-     */
-    public int length() {
-      return toString().length();
-    }
-
-    public String toString() {
-      encodeCurrentBytesIfAny();
-      result = result == null ? currentChars.toString() : result + currentChars.toString();
-      currentChars.setLength(0);
-      return result;
-    }
-  }
 }

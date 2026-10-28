@@ -41,6 +41,7 @@ public final class Detector {
   private static final int[] INDEXES_STOP_PATTERN = {6, 2, 7, 3};
   private static final float MAX_AVG_VARIANCE = 0.42f;
   private static final float MAX_INDIVIDUAL_VARIANCE = 0.8f;
+  private static final float MAX_STOP_PATTERN_HEIGHT_VARIANCE = 0.5f;
 
   // B S B S B S B S Bar/Space pattern
   // 11111111 0 1 0 1 0 1 000
@@ -57,6 +58,7 @@ public final class Detector {
   // ensure we don't miss it.
   private static final int ROW_STEP = 5;
   private static final int BARCODE_MIN_HEIGHT = 10;
+  private static final int[] ROTATIONS = {0, 180, 270, 90};
 
   private Detector() {
   }
@@ -77,20 +79,31 @@ public final class Detector {
     // different binarizers
     //boolean tryHarder = hints != null && hints.containsKey(DecodeHintType.TRY_HARDER);
 
-    BitMatrix bitMatrix = image.getBlackMatrix();
-
-    List<ResultPoint[]> barcodeCoordinates = detect(multiple, bitMatrix);
-    // Try 180, 270, 90 degree rotations, in that order
-    for (int rotate = 0; barcodeCoordinates.isEmpty() && rotate < 3; rotate++) {
-      bitMatrix = bitMatrix.clone();
-      if (rotate != 1) {
-        bitMatrix.rotate180();
-      } else {
-        bitMatrix.rotate90();
+    BitMatrix originalMatrix = image.getBlackMatrix();
+    for (int rotation : ROTATIONS) {
+      BitMatrix bitMatrix = applyRotation(originalMatrix, rotation);
+      List<ResultPoint[]> barcodeCoordinates = detect(multiple, bitMatrix);
+      if (!barcodeCoordinates.isEmpty()) {
+        return new PDF417DetectorResult(bitMatrix, barcodeCoordinates, rotation);
       }
-      barcodeCoordinates = detect(multiple, bitMatrix);
     }
-    return new PDF417DetectorResult(bitMatrix, barcodeCoordinates);
+    return new PDF417DetectorResult(originalMatrix, new ArrayList<>(), 0);
+  }
+
+  /**
+   * Applies a rotation to the supplied BitMatrix.
+   * @param matrix bit matrix to apply rotation to
+   * @param rotation the degrees of rotation to apply
+   * @return BitMatrix with applied rotation
+   */
+  private static BitMatrix applyRotation(BitMatrix matrix, int rotation) {
+    if (rotation % 360 == 0) {
+      return matrix;
+    }
+
+    BitMatrix newMatrix = matrix.clone();
+    newMatrix.rotate(rotation);
+    return newMatrix;
   }
 
   /**
@@ -166,14 +179,20 @@ public final class Detector {
     int width = matrix.getWidth();
 
     ResultPoint[] result = new ResultPoint[8];
-    copyToResult(result, findRowsWithPattern(matrix, height, width, startRow, startColumn, START_PATTERN),
+    int minHeight = BARCODE_MIN_HEIGHT;
+    copyToResult(result, findRowsWithPattern(matrix, height, width, startRow, startColumn, minHeight, START_PATTERN),
         INDEXES_START_PATTERN);
 
     if (result[4] != null) {
       startColumn = (int) result[4].getX();
       startRow = (int) result[4].getY();
+      if (result[5] != null) {
+        int endRow = (int) result[5].getY();
+        int startPatternHeight = endRow - startRow;
+        minHeight = (int) Math.max(startPatternHeight * MAX_STOP_PATTERN_HEIGHT_VARIANCE, BARCODE_MIN_HEIGHT);
+      }
     }
-    copyToResult(result, findRowsWithPattern(matrix, height, width, startRow, startColumn, STOP_PATTERN),
+    copyToResult(result, findRowsWithPattern(matrix, height, width, startRow, startColumn, minHeight, STOP_PATTERN),
         INDEXES_STOP_PATTERN);
     return result;
   }
@@ -189,14 +208,16 @@ public final class Detector {
                                                    int width,
                                                    int startRow,
                                                    int startColumn,
+                                                   int minHeight,
                                                    int[] pattern) {
     ResultPoint[] result = new ResultPoint[4];
     boolean found = false;
+    int minStartRow = startRow;
     int[] counters = new int[pattern.length];
     for (; startRow < height; startRow += ROW_STEP) {
       int[] loc = findGuardPattern(matrix, startColumn, startRow, width, pattern, counters);
       if (loc != null) {
-        while (startRow > 0) {
+        while (startRow > minStartRow + 1) {
           int[] previousRowLoc = findGuardPattern(matrix, startColumn, --startRow, width, pattern, counters);
           if (previousRowLoc != null) {
             loc = previousRowLoc;
@@ -239,7 +260,7 @@ public final class Detector {
       result[2] = new ResultPoint(previousRowLoc[0], stopRow);
       result[3] = new ResultPoint(previousRowLoc[1], stopRow);
     }
-    if (stopRow - startRow < BARCODE_MIN_HEIGHT) {
+    if (stopRow - startRow < minHeight) {
       Arrays.fill(result, null);
     }
     return result;

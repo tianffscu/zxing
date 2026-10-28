@@ -25,7 +25,9 @@ import com.google.zxing.common.BitMatrix;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +42,7 @@ import java.util.Map;
 public class FinderPatternFinder {
 
   private static final int CENTER_QUORUM = 2;
+  private static final int MAX_FINDER_PATTERN_CANDIDATES = 25;
   private static final EstimatedModuleComparator moduleComparator = new EstimatedModuleComparator();
   protected static final int MIN_SKIP = 3; // 1 pixel/module times 3 modules/center
   protected static final int MAX_MODULES = 97; // support up to version 20 for mobile clients
@@ -578,8 +581,12 @@ public class FinderPatternFinder {
     int confirmedCount = 0;
     float totalModuleSize = 0.0f;
     int max = possibleCenters.size();
+    FinderPattern[] confirmed = new FinderPattern[3];
     for (FinderPattern pattern : possibleCenters) {
       if (pattern.getCount() >= CENTER_QUORUM) {
+        if (confirmedCount < 3) {
+          confirmed[confirmedCount] = pattern;
+        }
         confirmedCount++;
         totalModuleSize += pattern.getEstimatedModuleSize();
       }
@@ -596,7 +603,25 @@ public class FinderPatternFinder {
     for (FinderPattern pattern : possibleCenters) {
       totalDeviation += Math.abs(pattern.getEstimatedModuleSize() - average);
     }
-    return totalDeviation <= 0.05f * totalModuleSize;
+    if (totalDeviation > 0.05f * totalModuleSize) {
+      return false;
+    }
+    // Three patterns that cannot be the corners of a QR code are not the answer either: one of
+    // them is a pattern inside the data. With exactly 3 confirmed centers, nothing else can
+    // replace it, so keep scanning for the real corner.
+    return confirmedCount > 3 || isPlausibleTriangle(confirmed[0], confirmed[1], confirmed[2]);
+  }
+
+  /**
+   * @return false iff the three patterns are far from the corners of an isosceles right triangle,
+   *         even allowing for a QR code that is seen at an angle
+   */
+  private static boolean isPlausibleTriangle(FinderPattern p0, FinderPattern p1, FinderPattern p2) {
+    double[] sides = {squaredDistance(p0, p1), squaredDistance(p1, p2), squaredDistance(p0, p2)};
+    Arrays.sort(sides);
+    // Same measure as selectBestPatterns(): it is 0 for an isosceles right triangle
+    double distortion = Math.abs(sides[2] - 2 * sides[1]) + Math.abs(sides[2] - 2 * sides[0]);
+    return distortion <= sides[2] / 2;
   }
 
   /**
@@ -621,7 +646,24 @@ public class FinderPatternFinder {
       throw NotFoundException.getNotFoundInstance();
     }
 
-    possibleCenters.sort(moduleComparator);
+    int confirmedCount = 0;
+    for (FinderPattern pattern : possibleCenters) {
+      if (pattern.getCount() >= CENTER_QUORUM) {
+        confirmedCount++;
+      }
+    }
+    if (confirmedCount >= 3 || startSize > MAX_FINDER_PATTERN_CANDIDATES) {
+      for (Iterator<FinderPattern> it = possibleCenters.iterator(); it.hasNext();) {
+        if (it.next().getCount() < CENTER_QUORUM) {
+          it.remove();
+        }
+      }
+    }
+
+    // A more up-to-date version would be "possibleCenters.sort(moduleComparator);"
+    // But we need this old syntax for android API 23 (Marshmallow) and below
+    // cf. https://github.com/zxing/zxing/issues/1358
+    Collections.sort(possibleCenters, moduleComparator);
 
     double distortion = Double.MAX_VALUE;
     FinderPattern[] bestPatterns = new FinderPattern[3];
@@ -684,6 +726,8 @@ public class FinderPatternFinder {
           // we need to check both two equal sides separately.
           // The value of |c^2 - 2 * b^2| + |c^2 - 2 * a^2| increases as dissimilarity
           // from isosceles right triangle.
+          // Heuristically it seems that the following formula works better (although it's
+          // not clear any more why...)
           double d = Math.abs(c - 2 * b) + Math.abs(c - 2 * a);
           if (d < distortion) {
             distortion = d;

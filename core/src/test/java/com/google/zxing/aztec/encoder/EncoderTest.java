@@ -477,6 +477,36 @@ public final class EncoderTest extends Assert {
     assertEquals(4, aztecCode.getLayers());
   }
 
+  @Test
+  public void testEncodeReferenceGridComplete() {
+    // Regression test for https://github.com/zxing/zxing/issues/2115
+    // A 12-layer full Aztec symbol is 67x67 modules and, per ISO/IEC 24778, must carry a
+    // complete reference grid with lines every 16 modules. Previously the outermost grid
+    // lines (one module in from each edge) were dropped because the drawing loop stopped one
+    // iteration short whenever (baseMatrixSize / 2 - 1) was an exact multiple of 15.
+    AztecCode aztec = Encoder.encode("Hello world", Encoder.DEFAULT_EC_PERCENT, 12);
+    assertFalse("Expected a full (non-compact) symbol", aztec.isCompact());
+    assertEquals("Unexpected nr. of layers", 12, aztec.getLayers());
+    BitMatrix matrix = aztec.getMatrix();
+    int size = matrix.getWidth();
+    assertEquals("Unexpected symbol size", 67, size);
+
+    // The outermost reference grid lines lie at coordinate 1 and size - 2. Along a grid line
+    // the encoder draws dark modules on every other position (matching the parity of the
+    // symbol centre); the interleaving positions stay light. A grid line is an exclusive
+    // reference column/row, so no data modules land on it.
+    int parity = (size / 2) & 1;
+    for (int coord : new int[] {1, size - 2}) {
+      for (int k = 0; k < size; k++) {
+        boolean expectedDark = (k & 1) == parity;
+        assertEquals("reference grid column x=" + coord + ", y=" + k,
+            expectedDark, matrix.get(coord, k));
+        assertEquals("reference grid row y=" + coord + ", x=" + k,
+            expectedDark, matrix.get(k, coord));
+      }
+    }
+  }
+
   // Helper routines
 
   private static void testEncode(String data, boolean compact, int layers, String expected) {
@@ -493,7 +523,7 @@ public final class EncoderTest extends Assert {
     assertEquals("Unexpected nr. of layers", layers, aztec.getLayers());
     BitMatrix matrix = aztec.getMatrix();
     AztecDetectorResult r =
-        new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers());
+        new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers(), 0);
     DecoderResult res = new Decoder().decode(r);
     assertEquals(data, res.getText());
     // Check error correction by introducing a few minor errors
@@ -502,7 +532,7 @@ public final class EncoderTest extends Assert {
     matrix.flip(random.nextInt(matrix.getWidth()), matrix.getHeight() - 2 + random.nextInt(2));
     matrix.flip(random.nextInt(2), random.nextInt(matrix.getHeight()));
     matrix.flip(matrix.getWidth() - 2 + random.nextInt(2), random.nextInt(matrix.getHeight()));
-    r = new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers());
+    r = new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers(), 0);
     res = new Decoder().decode(r);
     assertEquals(data, res.getText());
   }
@@ -527,7 +557,7 @@ public final class EncoderTest extends Assert {
     BitMatrix matrix2 = aztec.getMatrix();
     assertEquals(matrix, matrix2);
     AztecDetectorResult r =
-        new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers());
+        new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers(), 0);
     DecoderResult res = new Decoder().decode(r);
     assertEquals(data, res.getText());
     // Check error correction by introducing up to eccPercent/2 errors
@@ -543,7 +573,7 @@ public final class EncoderTest extends Assert {
                 : matrix.getHeight() - 1 - random.nextInt(aztec.getLayers() * 2);
       matrix.flip(x, y);
     }
-    r = new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers());
+    r = new AztecDetectorResult(matrix, NO_POINTS, aztec.isCompact(), aztec.getCodeWords(), aztec.getLayers(), 0);
     res = new Decoder().decode(r);
     assertEquals(data, res.getText());
   }

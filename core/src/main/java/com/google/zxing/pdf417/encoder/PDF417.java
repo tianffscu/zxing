@@ -643,13 +643,24 @@ public final class PDF417 {
    * @throws WriterException if the contents cannot be encoded in this format
    */
   public void generateBarcodeLogic(String msg, int errorCorrectionLevel) throws WriterException {
+    generateBarcodeLogic(msg, errorCorrectionLevel, false);
+  }
+
+  /**
+   * @param msg message to encode
+   * @param errorCorrectionLevel PDF417 error correction level to use
+   * @param autoECI automatically insert ECIs if needed
+   * @throws WriterException if the contents cannot be encoded in this format
+   */
+  public void generateBarcodeLogic(String msg, int errorCorrectionLevel, boolean autoECI) throws WriterException {
 
     //1. step: High-level encoding
     int errorCorrectionCodeWords = PDF417ErrorCorrection.getErrorCorrectionCodewordCount(errorCorrectionLevel);
-    String highLevel = PDF417HighLevelEncoder.encodeHighLevel(msg, compaction, encoding);
+    String highLevel = PDF417HighLevelEncoder.encodeHighLevel(msg, compaction, encoding, autoECI);
     int sourceCodeWords = highLevel.length();
 
-    int[] dimension = determineDimensions(sourceCodeWords, errorCorrectionCodeWords);
+    int[] dimension = determineDimensions(minCols, maxCols, minRows, maxRows, 
+        sourceCodeWords, errorCorrectionCodeWords);
 
     int cols = dimension[0];
     int rows = dimension[1];
@@ -682,16 +693,25 @@ public final class PDF417 {
    * Determine optimal nr of columns and rows for the specified number of
    * codewords.
    *
+   * @param minCols minimum number of columns
+   * @param maxCols maximum number of columns
+   * @param minRows minimum number of rows
+   * @param maxRows maximum number of rows
    * @param sourceCodeWords number of code words
    * @param errorCorrectionCodeWords number of error correction code words
    * @return dimension object containing cols as width and rows as height
+   * @throws WriterException when dimensions can't be determined
    */
-  private int[] determineDimensions(int sourceCodeWords, int errorCorrectionCodeWords) throws WriterException {
+  protected static int[] determineDimensions(int minCols, int maxCols,
+      int minRows, int maxRows,
+      int sourceCodeWords, int errorCorrectionCodeWords) throws WriterException {
     float ratio = 0.0f;
     int[] dimension = null;
+    int currentCol = minCols;
 
     for (int cols = minCols; cols <= maxCols; cols++) {
-
+      currentCol = cols;
+      
       int rows = calculateNumberOfRows(sourceCodeWords, errorCorrectionCodeWords, cols);
 
       if (rows < minRows) {
@@ -715,7 +735,7 @@ public final class PDF417 {
 
     // Handle case when min values were larger than necessary
     if (dimension == null) {
-      int rows = calculateNumberOfRows(sourceCodeWords, errorCorrectionCodeWords, minCols);
+      int rows = calculateNumberOfRows(sourceCodeWords, errorCorrectionCodeWords, currentCol);
       if (rows < minRows) {
         dimension = new int[]{minCols, minRows};
       }
